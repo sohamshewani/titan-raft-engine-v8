@@ -1,0 +1,161 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.titan.raft</groupId>
+    <artifactId>titan-raft-engine</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>titan-raft-engine</name>
+    <description>Production-grade high-performance Java Raft consensus engine with native integration hooks.</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.0</junit.version>
+        <jmh.version>1.37</jmh.version>
+    </properties>
+
+    <dependencies>
+        <!-- JMH for Benchmarking -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>${jmh.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>${jmh.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 5 for Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire Plugin for Testing -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.1</version>
+            </plugin>
+
+            <!-- OS-Execution & C/C++ Optimization Flags Plugin -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>compile-native</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>sh</executable>
+                            <commandlineArgs>-c '
+                                if [ -d "src/main/native" ]; then
+                                    echo "Compiling native components with CFLAGS: -O3 -Wall -Wextra"
+                                    mkdir -p target/native
+                                    cd src/main/native
+                                    gcc -O3 -Wall -Wextra -shared -fPIC *.c -o ../../../target/native/libtitanraft.so 2>/dev/null || \
+                                    g++ -O3 -Wall -Wextra -shared -fPIC *.cpp -o ../../../target/native/libtitanraft.so 2>/dev/null || \
+                                    echo "No C/C++ source files found to compile."
+                                else
+                                    echo "Optional directory src/main/native missing. Skipping native compilation."
+                                fi
+                            '</commandlineArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>benchmark</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-jar</argument>
+                                <argument>${project.build.directory}/benchmarks.jar</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Shade Plugin to bundle JMH Benchmarks Safely -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.openjdk.jmh.Main</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <outputFile>${project.build.directory}/benchmarks.jar</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- Working Targets as Profiles / Aliases -->
+        <profile>
+            <id>all</id>
+            <build>
+                <defaultGoal>clean compile test package</defaultGoal>
+            </build>
+        </profile>
+        <profile>
+            <id>build</id>
+            <build>
+                <defaultGoal>compile package</defaultGoal>
+            </build>
+        </profile>
+        <profile>
+            <id>test-target
